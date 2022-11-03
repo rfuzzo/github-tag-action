@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { gte, inc, parse, ReleaseType, SemVer, valid } from 'semver';
+import { gte, inc, parse, prerelease, ReleaseType, SemVer, valid } from 'semver';
 import { analyzeCommits } from '@semantic-release/commit-analyzer';
 import { generateNotes } from '@semantic-release/release-notes-generator';
 import {
@@ -73,6 +73,11 @@ export default async function main() {
     prefixRegex,
     /true/i.test(shouldFetchAllTags)
   );
+
+  validTags
+    .filter((tag) => prerelease(tag.name.replace(prefixRegex, '')))
+    .forEach((tag) => core.debug(`Found Valid Pre-release Tag: ${tag.name}.`));
+
   const latestTag = getLatestTag(validTags, prefixRegex, tagPrefix);
   const latestPrereleaseTag = getLatestPrereleaseTag(
     validTags,
@@ -80,12 +85,45 @@ export default async function main() {
     prefixRegex
   );
 
+  core.info(`latest tag was ${latestTag.name}, latestPrerelease tag was ${latestPrereleaseTag?.name}.`);
+
   let commits: Await<ReturnType<typeof getCommits>>;
 
   let newVersion: string;
 
   if (customTag) {
-    commits = await getCommits(latestTag.commit.sha, commitRef);
+    let previousTag: ReturnType<typeof getLatestTag> | null;
+    let previousVersion: SemVer | null;
+    if (!latestPrereleaseTag) {
+      previousTag = latestTag;
+    } else {
+      previousTag = gte(
+        latestTag.name.replace(prefixRegex, ''),
+        latestPrereleaseTag.name.replace(prefixRegex, '')
+      )
+        ? latestTag
+        : latestPrereleaseTag;
+    }
+
+    if (!previousTag) {
+      core.setFailed('Could not find previous tag.');
+      return;
+    }
+
+    previousVersion = parse(previousTag.name.replace(prefixRegex, ''));
+
+    if (!previousVersion) {
+      core.setFailed('Could not parse previous tag.');
+      return;
+    }
+
+    core.info(
+      `Previous tag was ${previousTag.name}, previous version was ${previousVersion.version}.`
+    );
+    core.setOutput('previous_version', previousVersion.version);
+    core.setOutput('previous_tag', previousTag.name);
+
+    commits = await getCommits(previousTag.commit.sha, commitRef);
 
     core.setOutput('release_type', 'custom');
     newVersion = customTag;
@@ -127,7 +165,7 @@ export default async function main() {
       {
         releaseRules: mappedReleaseRules
           ? // analyzeCommits doesn't appreciate rules with a section /shrug
-            mappedReleaseRules.map(({ section, ...rest }) => ({ ...rest }))
+          mappedReleaseRules.map(({ section, ...rest }) => ({ ...rest }))
           : undefined,
       },
       { commits, logger: { log: console.info.bind(console) } }

@@ -90,6 +90,7 @@ export default async function main() {
   let commits: Await<ReturnType<typeof getCommits>>;
 
   let newVersion: string;
+  let oldVersion: string;
 
   if (customTag) {
     let previousTag: ReturnType<typeof getLatestTag> | null;
@@ -127,6 +128,7 @@ export default async function main() {
 
     core.setOutput('release_type', 'custom');
     newVersion = customTag;
+    oldVersion = previousTag.name;
   } else {
     let previousTag: ReturnType<typeof getLatestTag> | null;
     let previousVersion: SemVer | null;
@@ -220,12 +222,14 @@ export default async function main() {
     }
 
     newVersion = incrementedVersion;
+    oldVersion = previousTag.name;
   }
 
   core.info(`New version is ${newVersion}.`);
   core.setOutput('new_version', newVersion);
 
   const newTag = `${tagPrefix}${newVersion}`;
+  const oldTag = `${tagPrefix}${oldVersion}`;
   core.info(`New tag after applying prefix is ${newTag}.`);
   core.setOutput('new_tag', newTag);
 
@@ -242,7 +246,7 @@ export default async function main() {
       options: {
         repositoryUrl: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`,
       },
-      lastRelease: { gitTag: latestTag.name },
+      lastRelease: { gitTag: oldTag },
       nextRelease: { gitTag: newTag, version: newVersion },
     }
   );

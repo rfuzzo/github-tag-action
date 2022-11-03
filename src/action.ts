@@ -81,7 +81,7 @@ export default async function main() {
   const latestTag = getLatestTag(validTags, prefixRegex, tagPrefix);
   const latestPrereleaseTag = getLatestPrereleaseTag(
     validTags,
-    identifier,
+    tagPrefix,
     prefixRegex
   );
 

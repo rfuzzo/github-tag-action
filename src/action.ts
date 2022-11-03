@@ -32,6 +32,9 @@ export default async function main() {
   const customReleaseRules = core.getInput('custom_release_rules');
   const shouldFetchAllTags = core.getInput('fetch_all_tags');
   const commitSha = core.getInput('commit_sha');
+  const usePrereleaseTag = /true/i.test(
+    core.getInput('use_prerelease_tag')
+  );
 
   let mappedReleaseRules;
   if (customReleaseRules) {
@@ -89,6 +92,39 @@ export default async function main() {
 
     core.setOutput('release_type', 'custom');
     newVersion = customTag;
+
+    let previousTag: ReturnType<typeof getLatestTag> | null;
+    let previousVersion: SemVer | null;
+    
+    if (!latestPrereleaseTag) {
+      previousTag = latestTag;
+    } else {
+      previousTag = gte(
+        latestTag.name.replace(prefixRegex, ''),
+        latestPrereleaseTag.name.replace(prefixRegex, '')
+      ) && !usePrereleaseTag
+        ? latestTag
+        : latestPrereleaseTag;
+    }
+
+    if (!previousTag) {
+      core.setFailed('Could not find previous tag.');
+      return;
+    }
+
+    previousVersion = parse(previousTag.name.replace(prefixRegex, ''));
+
+    if (!previousVersion) {
+      core.setFailed('Could not parse previous tag.');
+      return;
+    }
+
+    core.info(
+      `Previous tag was ${previousTag.name}, previous version was ${previousVersion.version}.`
+    );
+    core.setOutput('previous_version', previousVersion.version);
+    core.setOutput('previous_tag', previousTag.name);
+
   } else {
     let previousTag: ReturnType<typeof getLatestTag> | null;
     let previousVersion: SemVer | null;
